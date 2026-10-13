@@ -1,0 +1,14 @@
+name: trunk-git-auth
+description: "Trunk job-bound Buildkite OIDC Git-read credentials, without replacing stock checkout."
+author: https://github.com/balearic-labs
+requirements:
+  - bash
+  - git
+  - buildkite-agent
+configuration:
+  properties:
+    checkout:
+      type: boolean
+      description: "Use Buildkite native checkout (default). False retains Git auth but skips automatic source checkout."
+      default: true
+  additionalProperties: false

@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+# Trunk public v1 Buildkite agent hook: only configures Git auth before native checkout.
+# Install only on an isolated, disposable Buildkite agent/queue.
+set +x
+set -euo pipefail
+
+fail() { printf 'ENG-265 pre-checkout: %s\n' "$*" >&2; return 1; }
+
+# These two values must come from trusted agent configuration, not a repository.
+remote="${TRUNK_BUILDKITE_GIT_REMOTE:-}"
+audience="${TRUNK_BUILDKITE_OIDC_AUDIENCE:-}"
+
+# A downloaded agent hook cannot identify its original HTTPS download host.
+# Trust only the exact operator-pinned Git remote, never BUILDKITE_REPO or
+# a Host/Forwarded header. Accept one DNS HTTPS origin with no userinfo,
+# explicit port, query, fragment, URL escapes or ambiguous hostname labels.
+[[ "$remote" =~ ^https://([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]([a-z0-9-]{0,61}[a-z0-9])?/v1/git/[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9][A-Za-z0-9._-]*\.git$ ]] || {
+  fail 'TRUNK_BUILDKITE_GIT_REMOTE must be one exact HTTPS DNS Git repository URL'; return 1 2>/dev/null || exit 1;
+}
+origin="${remote%/v1/git/*}"
+[[ "$audience" == "$origin/v1/git/buildkite" ]] || {
+  fail 'TRUNK_BUILDKITE_OIDC_AUDIENCE must be the exact approved Git remote origin plus /v1/git/buildkite'; return 1 2>/dev/null || exit 1;
+}
+[[ "${BUILDKITE_REPO:-}" == "$remote" ]] || {
+  fail 'Buildkite remote does not equal the approved test remote'; return 1 2>/dev/null || exit 1;
+}
+# New refs use the collision-free _trunk namespace. Accept the historical
+# trunk/candidates branch only when its own server-side durable grant exists.
+[[ "${BUILDKITE_BRANCH:-}" =~ ^(_trunk|trunk)/candidates/chg_[a-z0-9]+/r[1-9][0-9]*$ ]] || {
+  fail 'Buildkite must request one immutable public candidate branch'; return 1 2>/dev/null || exit 1;
+}
+[[ "${BUILDKITE_COMMIT:-}" =~ ^[0-9a-fA-F]{40}$ ]] || {
+  fail 'Buildkite build commit must be one full 40-char Git SHA'; return 1 2>/dev/null || exit 1;
+}
+# A plugin option does not substitute for Buildkite's native checkout control.
+# checkout=false requests no automatic source materialization, but still sets
+# the job-local credential helper for possible command-phase Git reads.
+case "${BUILDKITE_PLUGIN_TRUNK_GIT_AUTH_CHECKOUT:-true}" in
+  true|false) ;;
+  *) fail 'checkout plugin option must be true or false'; return 1 2>/dev/null || exit 1 ;;
+esac
+if [[ "${BUILDKITE_PLUGIN_TRUNK_GIT_AUTH_CHECKOUT:-true}" == false ]]; then
+  export BUILDKITE_SKIP_CHECKOUT=true
+fi
+# A caller's own checkout.skip/BUILDKITE_SKIP_CHECKOUT remains authoritative.
+# In that case this plugin must not re-enable the native checkout.
+command -v git >/dev/null 2>&1 || { fail 'git is required'; return 1 2>/dev/null || exit 1; }
+command -v buildkite-agent >/dev/null 2>&1 || { fail 'buildkite-agent is required'; return 1 2>/dev/null || exit 1; }
+
+# Buildkite job shells inherit exported vars from pre-checkout. Do not store JWTs.
+# Mint on every Git credential request; no global ~/.gitconfig edits.
+urlHost="${remote#https://}"
+urlHost="${urlHost%%/*}"
+urlPath="${remote#https://$urlHost/}"
+count="${GIT_CONFIG_COUNT:-0}"
+[[ "$count" =~ ^[0-9]{1,2}$ ]] || { fail 'invalid Git config count'; return 1 2>/dev/null || exit 1; }
+(( 10#$count < 90 )) || { fail 'too many Git config entries'; return 1 2>/dev/null || exit 1; }
+
+umask 077
+helperDir="$(mktemp -d "${TMPDIR:-/tmp}/trunk-byo-git.XXXXXXXX")" || {
+  fail 'failed to allocate job-local helper'; return 1 2>/dev/null || exit 1;
+}
+cat > "$helperDir/credential-helper" <<'HELPER'
+#!/usr/bin/env bash
+set +x
+set -euo pipefail
+[[ "${1:-}" == 'get' ]] || exit 0
+protocol='' host='' path=''
+while IFS= read -r line; do
+  [[ -n "$line" ]] || break
+  case "$line" in
+    protocol=*) protocol="${line#protocol=}" ;;
+    host=*) host="${line#host=}" ;;
+    path=*) path="${line#path=}" ;;
+  esac
+done
+[[ "$protocol" == 'https' && "$host" == "${TRUNK_BUILDKITE_GIT_HOST:-}" && "$path" == "${TRUNK_BUILDKITE_GIT_PATH:-}" ]] || exit 0
+# Buildkite omits optional build_id and pipeline_id claims unless requested.
+# These identities bind the JWT to one historical Trunk BYO dispatch;
+# the server still verifies signature, job, source, tenant and authorization.
+jwt="$(buildkite-agent oidc request-token \
+  --audience "$TRUNK_BUILDKITE_OIDC_AUDIENCE" \
+  --claim build_id,pipeline_id)" || exit 1
+[[ "$jwt" =~ ^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$ ]] || exit 1
+printf 'username=trunk-byo\npassword=%s\n' "$jwt"
+HELPER
+chmod 700 "$helperDir/credential-helper"
+
+export TRUNK_BUILDKITE_JOB_HELPER_DIR="$helperDir"
+export TRUNK_BUILDKITE_GIT_HOST="$urlHost"
+export TRUNK_BUILDKITE_GIT_PATH="$urlPath"
+export TRUNK_BUILDKITE_OIDC_AUDIENCE="$audience"
+export GIT_TERMINAL_PROMPT=0
+export GIT_ASKPASS=false
+
+# URL-specific Git helper: reset ambient helpers only for this repository.
+# No token in Git URL, process args, file contents or global config.
+index="$count"
+add_git_config() {
+  local key="$1" value="$2" keyName="GIT_CONFIG_KEY_$index" valueName="GIT_CONFIG_VALUE_$index"
+  printf -v "$keyName" '%s' "$key"
+  printf -v "$valueName" '%s' "$value"
+  export "$keyName" "$valueName"
+  index="$((index + 1))"
+}
+add_git_config "credential.${remote}.helper" ''
+add_git_config "credential.${remote}.helper" "!${helperDir}/credential-helper"
+add_git_config "credential.${remote}.useHttpPath" true
+export GIT_CONFIG_COUNT="$index"

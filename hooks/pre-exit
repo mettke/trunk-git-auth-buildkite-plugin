@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Best-effort delete exactly our job-local script, never a directory tree.
+set +x
+set +e
+helperDir="${TRUNK_BUILDKITE_JOB_HELPER_DIR:-}"
+case "$helperDir" in
+  "${TMPDIR:-/tmp}"/trunk-byo-git.*)
+    if [[ -d "$helperDir" && ! -L "$helperDir" ]]; then
+      rm -f -- "$helperDir/credential-helper"
+      rmdir -- "$helperDir" 2>/dev/null || true
+    fi
+    ;;
+esac
+return 0 2>/dev/null || exit 0
