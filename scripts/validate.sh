@@ -7,12 +7,21 @@ if [[ "${1:-}" != '--expected-commit' || "$#" -ne 2 ]]; then
 fi
 expected="$2"
 [[ "$expected" =~ ^[0-9a-f]{40}$ ]] || { echo 'Invalid commit SHA' >&2; exit 2; }
-head="$(git rev-parse --verify HEAD)"
-[[ "$head" == "$expected" ]] || { echo "Wrong HEAD: $head (expected $expected)" >&2; exit 1; }
-[[ -z "$(git status --porcelain --untracked-files=all)" ]] || { echo 'Working tree must be clean' >&2; exit 1; }
+command -v git >/dev/null 2>&1 || { echo "git is required" >&2; exit 1; }
+root="$(pwd -P)"
+git_root="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo "Not a Git checkout" >&2; exit 1; }
+[[ "$root" == "$git_root" ]] || { echo "Validator must be in the plugin repository root" >&2; exit 1; }
+check_source() {
+  local head state
+  head="$(git rev-parse --verify HEAD 2>/dev/null)" || { echo "Cannot read HEAD" >&2; exit 1; }
+  [[ "$head" == "$expected" ]] || { echo "Wrong HEAD: $head (expected $expected)" >&2; exit 1; }
+  state="$(git status --porcelain=v1 --untracked-files=all)" || { echo "Cannot check working tree" >&2; exit 1; }
+  [[ -z "$state" ]] || { echo "Working tree must be clean" >&2; exit 1; }
+}
+check_source
+printf "Validating plugin commit %s\n" "$expected"
 for f in hooks/pre-checkout hooks/pre-exit tests/plugin.sh; do bash -n "$f"; done
 if command -v git >/dev/null 2>&1; then git diff --check; fi
 bash tests/plugin.sh
-[[ "$(git rev-parse --verify HEAD)" == "$expected" ]] || { echo 'HEAD changed during validation' >&2; exit 1; }
-[[ -z "$(git status --porcelain --untracked-files=all)" ]] || { echo 'Working tree changed during validation' >&2; exit 1; }
-echo "Plugin validation PASSED for $expected"
+check_source
+echo "Plugin validation PASSED for $expected (clean)"
