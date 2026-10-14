@@ -16,17 +16,17 @@ remote="${BUILDKITE_REPO:-}"
 }
 gitHost="${remote#https://}"
 gitHost="${gitHost%%/*}"
-# Default: Production only. A trusted operator may opt into specific
-# Preview hostnames; match the entire validated DNS hostname, never the URL
-# or an unanchored substring. Do not configure a universal allow-all regex.
+# Production works without any opt-in. The sole additional trusted host family
+# is the Trunk Vercel Preview naming convention for balearic-labs. Its dynamic
+# part accepts lowercase letters, digits and hyphens, never a dot/subdomain.
+# No operator-supplied regex can widen this host boundary.
+case "${ALLOW_TRUNK_PREVIEW:-false}" in
+  true|false) ;;
+  *) fail 'ALLOW_TRUNK_PREVIEW must be true or false'; return 1 2>/dev/null || exit 1 ;;
+esac
 if [[ "$gitHost" != 'app.trunk.dev' ]]; then
-  allowHostRegex="${ALLOW_HOST_REGEX:-}"
-  [[ -n "$allowHostRegex" && "$allowHostRegex" != '.*' ]] || {
-    fail 'Git remote host requires a narrowly scoped ALLOW_HOST_REGEX'; return 1 2>/dev/null || exit 1;
-  }
-  hostnamePattern="^(${allowHostRegex})$"
-  [[ "$gitHost" =~ $hostnamePattern ]] || {
-    fail 'Git remote hostname is not allowed by ALLOW_HOST_REGEX'; return 1 2>/dev/null || exit 1;
+  [[ "${ALLOW_TRUNK_PREVIEW:-false}" == true && "$gitHost" =~ ^trunk-[a-z0-9-]+-balearic-labs\.vercel\.app$ ]] || {
+    fail 'Git remote host is not an allowed Trunk Production/Preview hostname'; return 1 2>/dev/null || exit 1;
   }
 fi
 # Never use a caller-supplied audience, even if the legacy env name is set.

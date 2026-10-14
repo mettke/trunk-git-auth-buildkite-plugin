@@ -52,22 +52,28 @@ are obsolete; supplied legacy values are not used to select the remote or
 audience.
 
 For an explicitly authorized *internal Preview* job, the trusted Buildkite
-operator may additionally configure `ALLOW_HOST_REGEX`, for example:
+operator may set a single boolean environment variable:
 
 ```sh
-# Trusted operator/agent configuration, not unreviewed source-controlled job code.
-export ALLOW_HOST_REGEX='trunk-dashboard-[a-z0-9]+-balearic-labs\.vercel\.app'
+# Explicit opt-in for the Balearic-owned Trunk Vercel Preview host family.
+export ALLOW_TRUNK_PREVIEW=true
 ```
 
-This is a POSIX extended regex evaluated against the **entire already
-validated DNS hostname**, never against the full URL or a substring. Use a
-narrow exact-host or deployment-specific pattern; do not set `.*`, an
-all-host wildcard, or a Production-wide Preview exception. The option is
-unset by default and cannot permit cleartext, alternate paths, URL userinfo,
-ports or malformed hostnames. It is host protection, **not** a substitute for
-Trunk's server-side OIDC, immutable-source, tenant and read-only authorization.
-A Preview that has not independently enabled the matching Trunk Git OIDC
-audience still fails closed.
+With this opt-in, the only additional allowed hostname shape is
+`trunk-[a-z0-9-]+-balearic-labs.vercel.app` (full hostname match). The
+variable segment permits lowercase letters, numbers and hyphens **but not
+dots**, so a second subdomain or a different Vercel team is never accepted.
+This is a hardcoded host convention, not a user-supplied regular expression:
+the old `ALLOW_HOST_REGEX` setting is ignored and must be removed. By
+default (unset or `false`), only `app.trunk.dev` is allowed; other boolean
+values are rejected. The Preview opt-in never loosens HTTPS, URL path,
+port, userinfo, query or fragment validation.
+
+This option restricts *where a Buildkite-issued token can be sent*; it
+does not prove which Vercel deployment is authoritative. The operator must
+trust control of the matching Preview hostname, and the deployed Trunk
+server must still independently authorize the exact job-bound OIDC audience,
+historical dispatch, immutable candidate and read-only Git operation.
 
 The Buildkite job must have a valid public immutable candidate branch
 `_trunk/candidates/chg_.../rN` (historical `trunk/candidates/...` is checked
@@ -79,6 +85,6 @@ On each matching HTTPS credential challenge the helper requests `buildkite-agent
 
 ## Validation and migration
 
-Run `./scripts/validate.sh --expected-commit <FULL_40_CHARACTER_COMMIT_SHA>` from a clean Git checkout of the exact reviewed feature commit. The validator verifies the full HEAD and a clean tracked/staged/untracked working tree **before and after** syntax/security checks, mock OIDC multiple-request checks, ambient Git-helper suppression without global-config mutation, default Production-only host and explicit full-host Preview regex, malformed HTTPS-origin rejection, isolation and no-checkout behavior. Missing or incorrect SHA, an unexpected repository root, Git read failure, or a dirty checkout fails before tests. It does not substitute for a real API-created Buildkite Hosted job with normal native Git checkout at exact HEAD, a separate source-free no-checkout job, fail-closed authorization negatives, real job lifecycle cleanup and Codex/exact-head validation. Those gates must pass before publication/Trunk script retirement.
+Run `./scripts/validate.sh --expected-commit <FULL_40_CHARACTER_COMMIT_SHA>` from a clean Git checkout of the exact reviewed feature commit. The validator verifies the full HEAD and a clean tracked/staged/untracked working tree **before and after** syntax/security checks, mock OIDC multiple-request checks, ambient Git-helper suppression without global-config mutation, default Production-only host and explicit boolean opt-in for the fixed Trunk Vercel Preview host family, malformed HTTPS-origin rejection, isolation and no-checkout behavior. Missing or incorrect SHA, an unexpected repository root, Git read failure, or a dirty checkout fails before tests. It does not substitute for a real API-created Buildkite Hosted job with normal native Git checkout at exact HEAD, a separate source-free no-checkout job, fail-closed authorization negatives, real job lifecycle cleanup and Codex/exact-head validation. Those gates must pass before publication/Trunk script retirement.
 
 The temporary v1 URLs in Trunk remain independently managed until consumers—including the active ENG-78 fixture—have migrated. Do not rely on these URLs from this plugin, and do not remove them before the approved retirement stage.

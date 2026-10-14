@@ -18,7 +18,7 @@ export BUILDKITE_REPO='https://app.trunk.dev/v1/git/acme/fixture.git'
 export BUILDKITE_BRANCH='_trunk/candidates/chg_abc123/r1'
 export BUILDKITE_COMMIT=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 export MOCK_EXPECTED_AUDIENCE='https://app.trunk.dev/v1/git/buildkite'
-unset ALLOW_HOST_REGEX TRUNK_BUILDKITE_GIT_REMOTE TRUNK_BUILDKITE_OIDC_AUDIENCE
+unset ALLOW_TRUNK_PREVIEW ALLOW_HOST_REGEX TRUNK_BUILDKITE_GIT_REMOTE TRUNK_BUILDKITE_OIDC_AUDIENCE
 # Protect against ambient personal/global Git helpers hijacking Trunk auth.
 # For the exact Trunk URL the plugin must reset such helpers in process-only
 # Git configuration; never edit the operator's global .gitconfig.
@@ -76,10 +76,11 @@ done
 )
 [[ "$(wc -l < "$CALLS")" == 5 ]] || { echo 'different Trunk repo OIDC request missing' >&2; exit 9; }
 
-# Preview requires an explicit operator-owned hostname pattern, and its
-# audience must follow that allowed host rather than a pinned old env value.
+# Preview opt-in permits only the hardcoded Trunk Vercel host family.
+# Legacy ALLOW_HOST_REGEX is deliberately set to an unrestricted value:
+# it MUST have no influence on credential destination validation.
 (
-  export ALLOW_HOST_REGEX='trunk-dashboard-[a-z0-9]+-balearic-labs\.vercel\.app'
+  export ALLOW_TRUNK_PREVIEW=true ALLOW_HOST_REGEX='.+'
   export BUILDKITE_REPO='https://trunk-dashboard-qyni6rzes-balearic-labs.vercel.app/v1/git/acme/fixture.git'
   export MOCK_EXPECTED_AUDIENCE='https://trunk-dashboard-qyni6rzes-balearic-labs.vercel.app/v1/git/buildkite'
   export TRUNK_BUILDKITE_OIDC_AUDIENCE='https://wrong.example/v1/git/buildkite'
@@ -93,8 +94,27 @@ done
   source "$root/hooks/pre-exit"
   [[ ! -e "$helper" ]] || exit 12
 )
-[[ "$(wc -l < "$CALLS")" == 6 ]] || { echo 'explicit Preview OIDC request missing' >&2; exit 13; }
-[[ ! -s "$AMBIENT_CALLS" ]] || { echo 'ambient Git helper used' >&2; exit 14; }
+[[ "$(wc -l < "$CALLS")" == 6 ]] || { echo 'opted-in Preview OIDC request missing' >&2; exit 13; }
+
+# A second ephemeral Preview name needs neither a new pattern nor a new build
+# variable. Checkout:false remains able to use the job-local read-only helper.
+(
+  export ALLOW_TRUNK_PREVIEW=true
+  export BUILDKITE_REPO='https://trunk-marketing-git-eng-302-plugin-consumer-balearic-labs.vercel.app/v1/git/acme/fixture.git'
+  export MOCK_EXPECTED_AUDIENCE='https://trunk-marketing-git-eng-302-plugin-consumer-balearic-labs.vercel.app/v1/git/buildkite'
+  export BUILDKITE_PLUGIN_TRUNK_GIT_AUTH_CHECKOUT=false BUILDKITE_SKIP_CHECKOUT=false
+  source "$root/hooks/pre-checkout"
+  [[ "$BUILDKITE_SKIP_CHECKOUT" == true && ! -e .git ]]
+  [[ "$TRUNK_BUILDKITE_OIDC_AUDIENCE" == "$MOCK_EXPECTED_AUDIENCE" ]]
+  credential="$(printf 'protocol=https\nhost=trunk-marketing-git-eng-302-plugin-consumer-balearic-labs.vercel.app\npath=v1/git/acme/fixture.git\n\n' | git credential fill)"
+  [[ "$credential" == *'username=trunk-byo'* ]] || exit 14
+  helper="$TRUNK_BUILDKITE_JOB_HELPER_DIR/credential-helper"
+  [[ -z "$(printf 'protocol=https\nhost=trunk-dashboard-qyni6rzes-balearic-labs.vercel.app\npath=v1/git/acme/fixture.git\n\n' | "$helper" get)" ]] || exit 15
+  source "$root/hooks/pre-exit"
+  [[ ! -e "$helper" ]] || exit 16
+)
+[[ "$(wc -l < "$CALLS")" == 7 ]] || { echo 'second Preview OIDC request missing' >&2; exit 17; }
+[[ ! -s "$AMBIENT_CALLS" ]] || { echo 'ambient Git helper used for allowed hosts' >&2; exit 18; }
 
 # Legacy immutable ref shape remains a syntax-only acceptance; actual Git
 # authority for the historical ref is independently checked by Trunk Core.
@@ -125,9 +145,8 @@ for bad in \
     exit 3
   fi
 done
-# Reject non-Trunk destinations and malformed URL shapes before helper
-# configuration. A permissive-looking Preview regex cannot allow malformed
-# URLs, while an anchored regex must not accept a matching hostname substring.
+# Fail closed for malformed URL shapes even when Preview is enabled. The
+# existing exact HTTPS, DNS-label and /v1/git/... route checks stay in force.
 for malformed in \
   'https://operator@app.trunk.dev/v1/git/acme/fixture.git' \
   'https://app.trunk.dev:443/v1/git/acme/fixture.git' \
@@ -140,57 +159,60 @@ for malformed in \
   'https://app.trunk.dev/v1/git/acme/fixture.git/' \
   'https://app.trunk.dev.evil.example/v1/git/acme/fixture.git'; do
   if (
-    export BUILDKITE_REPO="$malformed" ALLOW_HOST_REGEX='trunk-dashboard-[a-z0-9]+-balearic-labs\.vercel\.app'
-    export BUILDKITE_PLUGIN_TRUNK_GIT_AUTH_CHECKOUT=true
+    export BUILDKITE_REPO="$malformed" ALLOW_TRUNK_PREVIEW=true ALLOW_HOST_REGEX='.+'
     source "$root/hooks/pre-checkout"
   ) >/dev/null 2>&1; then
-    echo "Accepted malformed or unexpected host: $malformed" >&2
-    exit 15
+    echo "Accepted malformed or unexpected Git URL: $malformed" >&2
+    exit 19
   fi
 done
 
 preview='https://trunk-dashboard-qyni6rzes-balearic-labs.vercel.app/v1/git/acme/fixture.git'
-# A blanket preview exception is never accepted, even when the URL is valid.
-if (
-  export BUILDKITE_REPO="$preview" ALLOW_HOST_REGEX='.*'
-  source "$root/hooks/pre-checkout"
-) >/dev/null 2>&1; then
-  echo 'Accepted blanket Preview hostname pattern' >&2
-  exit 21
-fi
-# Unconfigured Preview is rejected even when legacy settings claim approval.
-if (
-  export BUILDKITE_REPO="$preview" TRUNK_BUILDKITE_GIT_REMOTE="$preview"
-  export TRUNK_BUILDKITE_OIDC_AUDIENCE='https://trunk-dashboard-qyni6rzes-balearic-labs.vercel.app/v1/git/buildkite'
-  unset ALLOW_HOST_REGEX
-  source "$root/hooks/pre-checkout"
-) >/dev/null 2>&1; then
-  echo 'Accepted Preview without ALLOW_HOST_REGEX' >&2
-  exit 16
-fi
-
-for rejected in \
-  'https://trunk-dashboard-qyni6rzes-balearic-labs.vercel.app.evil.example/v1/git/acme/fixture.git' \
-  'https://evil-trunk-dashboard-qyni6rzes-balearic-labs.vercel.app/v1/git/acme/fixture.git'; do
+# A missing/false Preview opt-in must deny even if the old regex is wide open.
+for mode in 'unset' false; do
   if (
-    export BUILDKITE_REPO="$rejected"
-    export ALLOW_HOST_REGEX='trunk-dashboard-[a-z0-9]+-balearic-labs\.vercel\.app'
+    export BUILDKITE_REPO="$preview" ALLOW_HOST_REGEX='[a-z0-9.-]+'
+    export TRUNK_BUILDKITE_GIT_REMOTE="$preview"
+    if [[ "$mode" == unset ]]; then unset ALLOW_TRUNK_PREVIEW; else export ALLOW_TRUNK_PREVIEW=false; fi
     source "$root/hooks/pre-checkout"
   ) >/dev/null 2>&1; then
-    echo "Accepted unanchored Preview hostname: $rejected" >&2
-    exit 17
+    echo "Accepted Preview without true ALLOW_TRUNK_PREVIEW: $mode" >&2
+    exit 20
   fi
 done
-if (
-  export BUILDKITE_REPO="$preview" ALLOW_HOST_REGEX='vercel\.app'
-  source "$root/hooks/pre-checkout"
-) >/dev/null 2>&1; then
-  echo 'Accepted substring-only Preview host regex' >&2
-  exit 18
-fi
-[[ "$(wc -l < "$CALLS")" == 6 ]] ||
-  { echo 'invalid Git requests must not request OIDC' >&2; exit 19; }
+# Reject ambiguous toggle values, including on Production URLs.
+for invalidFlag in yes TRUE 1 on '.+'; do
+  if (
+    export BUILDKITE_REPO='https://app.trunk.dev/v1/git/acme/fixture.git'
+    export ALLOW_TRUNK_PREVIEW="$invalidFlag"
+    source "$root/hooks/pre-checkout"
+  ) >/dev/null 2>&1; then
+    echo "Accepted invalid ALLOW_TRUNK_PREVIEW value: $invalidFlag" >&2
+    exit 21
+  fi
+done
+# The dot is not permitted inside the variable hostname part. Anchors also
+# exclude a different Vercel team, prefix, suffix or extra DNS subdomain.
+for rejected in \
+  'https://trunk-dashboard.qyni6rzes-balearic-labs.vercel.app/v1/git/acme/fixture.git' \
+  'https://trunk-dashboard-qyni6rzes.balearic-labs.vercel.app/v1/git/acme/fixture.git' \
+  'https://trunk-dashboard-qyni6rzes-balearic-labs.vercel.app.evil.example/v1/git/acme/fixture.git' \
+  'https://evil-trunk-dashboard-qyni6rzes-balearic-labs.vercel.app/v1/git/acme/fixture.git' \
+  'https://trunk-dashboard-qyni6rzes-other-team.vercel.app/v1/git/acme/fixture.git' \
+  'https://trunk-dashboard-qyni6rzes-balearic-labs.evil.example/v1/git/acme/fixture.git' \
+  'https://trunk-dashboard-qyni6rzes-balearic-labs.vercel.com/v1/git/acme/fixture.git' \
+  'https://other.vercel.app/v1/git/acme/fixture.git'; do
+  if (
+    export BUILDKITE_REPO="$rejected" ALLOW_TRUNK_PREVIEW=true ALLOW_HOST_REGEX='[a-z0-9.-]+'
+    source "$root/hooks/pre-checkout"
+  ) >/dev/null 2>&1; then
+    echo "Accepted outside fixed Trunk Preview host family: $rejected" >&2
+    exit 22
+  fi
+done
+[[ "$(wc -l < "$CALLS")" == 7 ]] ||
+  { echo 'rejected Git destinations must not request OIDC' >&2; exit 23; }
 [[ ! -s "$AMBIENT_CALLS" ]] ||
-  { echo 'ambient helper must never be used for pinned remote' >&2; exit 20; }
+  { echo 'ambient Git helper must not be used for an allowed Trunk remote' >&2; exit 24; }
 
-echo 'PASS: native/no-source modes, multiple Trunk repos, exact-host Preview opt-in, derived audience, URL-scoped helpers, malformed hosts, credential isolation and cleanup'
+echo 'PASS: native/no-source modes, multiple Trunk repos, hardcoded Trunk Preview host family, default deny and strict boolean, derived audience, URL-scoped helpers, malformed hosts, credential isolation and cleanup'
