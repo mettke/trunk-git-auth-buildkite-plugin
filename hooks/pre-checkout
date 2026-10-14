@@ -6,24 +6,31 @@ set -euo pipefail
 
 fail() { printf 'ENG-265 pre-checkout: %s\n' "$*" >&2; return 1; }
 
-# These two values must come from trusted agent configuration, not a repository.
-remote="${TRUNK_BUILDKITE_GIT_REMOTE:-}"
-audience="${TRUNK_BUILDKITE_OIDC_AUDIENCE:-}"
-
-# A downloaded agent hook cannot identify its original HTTPS download host.
-# Trust only the exact operator-pinned Git remote, never BUILDKITE_REPO or
-# a Host/Forwarded header. Accept one DNS HTTPS origin with no userinfo,
-# explicit port, query, fragment, URL escapes or ambiguous hostname labels.
+# Repository selection is Buildkite pipeline configuration (BUILDKITE_REPO),
+# not an authorization grant or a value supplied separately to this plugin.
+# A narrowly allowed host prevents accidentally sending job OIDC to arbitrary
+# Git destinations; Trunk independently verifies the historical dispatch.
+remote="${BUILDKITE_REPO:-}"
 [[ "$remote" =~ ^https://([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]([a-z0-9-]{0,61}[a-z0-9])?/v1/git/[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9][A-Za-z0-9._-]*\.git$ ]] || {
-  fail 'TRUNK_BUILDKITE_GIT_REMOTE must be one exact HTTPS DNS Git repository URL'; return 1 2>/dev/null || exit 1;
+  fail 'BUILDKITE_REPO must be one exact HTTPS Trunk Git repository URL'; return 1 2>/dev/null || exit 1;
 }
-origin="${remote%/v1/git/*}"
-[[ "$audience" == "$origin/v1/git/buildkite" ]] || {
-  fail 'TRUNK_BUILDKITE_OIDC_AUDIENCE must be the exact approved Git remote origin plus /v1/git/buildkite'; return 1 2>/dev/null || exit 1;
-}
-[[ "${BUILDKITE_REPO:-}" == "$remote" ]] || {
-  fail 'Buildkite remote does not equal the approved test remote'; return 1 2>/dev/null || exit 1;
-}
+gitHost="${remote#https://}"
+gitHost="${gitHost%%/*}"
+# Default: Production only. A trusted operator may opt into specific
+# Preview hostnames; match the entire validated DNS hostname, never the URL
+# or an unanchored substring. Do not configure a universal allow-all regex.
+if [[ "$gitHost" != 'app.trunk.dev' ]]; then
+  allowHostRegex="${ALLOW_HOST_REGEX:-}"
+  [[ -n "$allowHostRegex" && "$allowHostRegex" != '.*' ]] || {
+    fail 'Git remote host requires a narrowly scoped ALLOW_HOST_REGEX'; return 1 2>/dev/null || exit 1;
+  }
+  hostnamePattern="^(${allowHostRegex})$"
+  [[ "$gitHost" =~ $hostnamePattern ]] || {
+    fail 'Git remote hostname is not allowed by ALLOW_HOST_REGEX'; return 1 2>/dev/null || exit 1;
+  }
+fi
+# Never use a caller-supplied audience, even if the legacy env name is set.
+audience="https://${gitHost}/v1/git/buildkite"
 # New refs use the collision-free _trunk namespace. Accept the historical
 # trunk/candidates branch only when its own server-side durable grant exists.
 [[ "${BUILDKITE_BRANCH:-}" =~ ^(_trunk|trunk)/candidates/chg_[a-z0-9]+/r[1-9][0-9]*$ ]] || {
