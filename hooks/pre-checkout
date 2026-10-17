@@ -24,7 +24,7 @@ case "${ALLOW_TRUNK_PREVIEW:-false}" in
   true|false) ;;
   *) fail 'ALLOW_TRUNK_PREVIEW must be true or false'; return 1 2>/dev/null || exit 1 ;;
 esac
-if [[ "$gitHost" != 'app.trunk.dev' ]]; then
+if [[ "$gitHost" != 'api.trunk.dev' ]]; then
   [[ "${ALLOW_TRUNK_PREVIEW:-false}" == true && "$gitHost" =~ ^trunk-[a-z0-9-]+-balearic-labs\.vercel\.app$ ]] || {
     fail 'Git remote host is not an allowed Trunk Production/Preview hostname'; return 1 2>/dev/null || exit 1;
   }

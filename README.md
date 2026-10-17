@@ -33,7 +33,7 @@ Use only supported Buildkite agents with plugin hooks and native `checkout.skip`
 
 Configure the Buildkite pipeline's normal **Repository** setting to the intended
 Trunk Git HTTPS remote, for example
-`https://app.trunk.dev/v1/git/<org>/<repo>.git`. The plugin reads Buildkite's
+`https://api.trunk.dev/v1/git/<org>/<repo>.git`. The plugin reads Buildkite's
 existing `BUILDKITE_REPO` and **does not choose, rewrite or validate the
 customer's intended repository**. Do not hardcode a second remote in job YAML.
 The plugin also does not configure Trunk's BYO Buildkite dispatch or pipeline
@@ -44,7 +44,7 @@ reads.
 
 Before enabling its job-local helper, `pre-checkout` requires one canonical
 lowercase-DNS HTTPS host, no port/userinfo/escape/query/fragment, and the exact
-route `/v1/git/<org>/<repo>.git`. **Only `app.trunk.dev` is allowed by
+route `/v1/git/<org>/<repo>.git`. **Only `api.trunk.dev` is allowed by
 default.** The plugin constructs the OIDC audience solely from that validated
 host, as `https://<host>/v1/git/buildkite`. The previous required
 `TRUNK_BUILDKITE_GIT_REMOTE` and `TRUNK_BUILDKITE_OIDC_AUDIENCE` job inputs
@@ -65,7 +65,7 @@ variable segment permits lowercase letters, numbers and hyphens **but not
 dots**, so a second subdomain or a different Vercel team is never accepted.
 This is a hardcoded host convention, not a user-supplied regular expression:
 the old `ALLOW_HOST_REGEX` setting is ignored and must be removed. By
-default (unset or `false`), only `app.trunk.dev` is allowed; other boolean
+default (unset or `false`), only `api.trunk.dev` is allowed; other boolean
 values are rejected. The Preview opt-in never loosens HTTPS, URL path,
 port, userinfo, query or fragment validation.
 
@@ -84,6 +84,12 @@ own server policy; the plugin cannot authorize a pipeline.
 On each matching HTTPS credential challenge the helper requests `buildkite-agent oidc request-token --audience ... --claim build_id,pipeline_id`. Tokens are not persisted to Git config, URLs, command arguments or disk. The helper is created with a job-local restrictive permission and pre-exit removes only the matching owned file. Do not install global hooks on a shared queue. Avoid `set -x` around any authentication path.
 
 ## Validation and migration
+
+The canonical Git host is now `api.trunk.dev`; `app.trunk.dev` is rejected,
+even with `ALLOW_TRUNK_PREVIEW=true`. Update the pipeline Repository setting
+to `https://api.trunk.dev/v1/git/<org>/<repo>.git` when adopting this plugin
+commit. Its OIDC audience is exactly `https://api.trunk.dev/v1/git/buildkite`.
+Explicitly opted-in Preview hosts retain their own host-derived audience.
 
 Run `./scripts/validate.sh --expected-commit <FULL_40_CHARACTER_COMMIT_SHA>` from a clean Git checkout of the exact reviewed feature commit. The validator verifies the full HEAD and a clean tracked/staged/untracked working tree **before and after** syntax/security checks, mock OIDC multiple-request checks, ambient Git-helper suppression without global-config mutation, default Production-only host and explicit boolean opt-in for the fixed Trunk Vercel Preview host family, malformed HTTPS-origin rejection, isolation and no-checkout behavior. Missing or incorrect SHA, an unexpected repository root, Git read failure, or a dirty checkout fails before tests. It does not substitute for a real API-created Buildkite Hosted job with normal native Git checkout at exact HEAD, a separate source-free no-checkout job, fail-closed authorization negatives, real job lifecycle cleanup and Codex/exact-head validation. Those gates must pass before publication/Trunk script retirement.
 

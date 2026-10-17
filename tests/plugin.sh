@@ -7,17 +7,17 @@ mkdir -p "$tmp/bin" "$tmp/home" "$tmp/empty"
 cat > "$tmp/bin/buildkite-agent" <<'AGENT'
 #!/usr/bin/env bash
 set -euo pipefail
-[[ "$*" == "oidc request-token --audience ${MOCK_EXPECTED_AUDIENCE:-https://app.trunk.dev/v1/git/buildkite} --claim build_id,pipeline_id" ]] || exit 81
+[[ "$*" == "oidc request-token --audience ${MOCK_EXPECTED_AUDIENCE:-https://api.trunk.dev/v1/git/buildkite} --claim build_id,pipeline_id" ]] || exit 81
 printf 'called\n' >> "$CALLS"
 printf 'eyJhbGciOiJSUzI1NiJ9.eyJqb2IiOiJtb2NrIn0.sigmock\n'
 AGENT
 chmod 700 "$tmp/bin/buildkite-agent"
 export PATH="$tmp/bin:$PATH" HOME="$tmp/home" TMPDIR="$tmp"
 export CALLS="$tmp/oidc.log"
-export BUILDKITE_REPO='https://app.trunk.dev/v1/git/acme/fixture.git'
+export BUILDKITE_REPO='https://api.trunk.dev/v1/git/acme/fixture.git'
 export BUILDKITE_BRANCH='_trunk/candidates/chg_abc123/r1'
 export BUILDKITE_COMMIT=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-export MOCK_EXPECTED_AUDIENCE='https://app.trunk.dev/v1/git/buildkite'
+export MOCK_EXPECTED_AUDIENCE='https://api.trunk.dev/v1/git/buildkite'
 unset ALLOW_TRUNK_PREVIEW ALLOW_HOST_REGEX TRUNK_BUILDKITE_GIT_REMOTE TRUNK_BUILDKITE_OIDC_AUDIENCE
 # Protect against ambient personal/global Git helpers hijacking Trunk auth.
 # For the exact Trunk URL the plugin must reset such helpers in process-only
@@ -44,13 +44,14 @@ for mode in true false; do
     if [[ "$mode" == false ]]; then [[ "$BUILDKITE_SKIP_CHECKOUT" == true ]]; else [[ "$BUILDKITE_SKIP_CHECKOUT" == false ]]; fi
     [[ ! -e .git ]]
     for i in 1 2; do
-      output="$(printf 'protocol=https\nhost=app.trunk.dev\npath=v1/git/acme/fixture.git\n\n' | git credential fill)"
+      output="$(printf 'protocol=https\nhost=api.trunk.dev\npath=v1/git/acme/fixture.git\n\n' | git credential fill)"
       [[ "$output" == *'username=trunk-byo'* && "$output" == *'password=eyJhbGciOiJSUzI1NiJ9.eyJqb2IiOiJtb2NrIn0.sigmock'* ]]
     done
     helper="$TRUNK_BUILDKITE_JOB_HELPER_DIR/credential-helper"
-    [[ -z "$(printf 'protocol=https\nhost=app.trunk.dev\npath=v1/git/acme/other.git\n\n' | "$helper" get)" ]]
+    [[ -z "$(printf 'protocol=https\nhost=api.trunk.dev\npath=v1/git/acme/other.git\n\n' | "$helper" get)" ]]
     [[ -z "$(printf 'protocol=https\nhost=other.example\npath=v1/git/acme/fixture.git\n\n' | "$helper" get)" ]]
-    [[ -z "$(printf 'protocol=http\nhost=app.trunk.dev\npath=v1/git/acme/fixture.git\n\n' | "$helper" get)" ]]
+    [[ -z "$(printf 'protocol=https\nhost=app.trunk.dev\npath=v1/git/acme/fixture.git\n\n' | "$helper" get)" ]]
+    [[ -z "$(printf 'protocol=http\nhost=api.trunk.dev\npath=v1/git/acme/fixture.git\n\n' | "$helper" get)" ]]
     source "$root/hooks/pre-exit"
     [[ ! -e "$helper" ]]
   )
@@ -63,14 +64,14 @@ done
 # A different valid Trunk repository works without a second configured Git
 # remote or audience. The job-local helper must be scoped to the new path.
 (
-  export BUILDKITE_REPO='https://app.trunk.dev/v1/git/another-org/second-repo.git'
+  export BUILDKITE_REPO='https://api.trunk.dev/v1/git/another-org/second-repo.git'
   export BUILDKITE_PLUGIN_TRUNK_GIT_AUTH_CHECKOUT=true
   source "$root/hooks/pre-checkout"
   [[ "$TRUNK_BUILDKITE_OIDC_AUDIENCE" == "$MOCK_EXPECTED_AUDIENCE" ]]
-  credential="$(printf 'protocol=https\nhost=app.trunk.dev\npath=v1/git/another-org/second-repo.git\n\n' | git credential fill)"
+  credential="$(printf 'protocol=https\nhost=api.trunk.dev\npath=v1/git/another-org/second-repo.git\n\n' | git credential fill)"
   [[ "$credential" == *'username=trunk-byo'* ]] || exit 6
   helper="$TRUNK_BUILDKITE_JOB_HELPER_DIR/credential-helper"
-  [[ -z "$(printf 'protocol=https\nhost=app.trunk.dev\npath=v1/git/acme/fixture.git\n\n' | "$helper" get)" ]] || exit 7
+  [[ -z "$(printf 'protocol=https\nhost=api.trunk.dev\npath=v1/git/acme/fixture.git\n\n' | "$helper" get)" ]] || exit 7
   source "$root/hooks/pre-exit"
   [[ ! -e "$helper" ]] || exit 8
 )
@@ -90,7 +91,7 @@ done
   credential="$(printf 'protocol=https\nhost=trunk-dashboard-qyni6rzes-balearic-labs.vercel.app\npath=v1/git/acme/fixture.git\n\n' | git credential fill)"
   [[ "$credential" == *'username=trunk-byo'* ]] || exit 10
   helper="$TRUNK_BUILDKITE_JOB_HELPER_DIR/credential-helper"
-  [[ -z "$(printf 'protocol=https\nhost=app.trunk.dev\npath=v1/git/acme/fixture.git\n\n' | "$helper" get)" ]] || exit 11
+  [[ -z "$(printf 'protocol=https\nhost=api.trunk.dev\npath=v1/git/acme/fixture.git\n\n' | "$helper" get)" ]] || exit 11
   source "$root/hooks/pre-exit"
   [[ ! -e "$helper" ]] || exit 12
 )
@@ -139,7 +140,7 @@ for bad in \
   'BUILDKITE_REPO=https://wrong.example/v1/git/acme/fixture.git' \
   'BUILDKITE_BRANCH=main' \
   'BUILDKITE_COMMIT=HEAD' \
-  'BUILDKITE_REPO=ssh://app.trunk.dev/v1/git/acme/fixture.git'; do
+  'BUILDKITE_REPO=ssh://api.trunk.dev/v1/git/acme/fixture.git'; do
   if (export BUILDKITE_PLUGIN_TRUNK_GIT_AUTH_CHECKOUT=true; eval "export $bad"; source "$root/hooks/pre-checkout") >/dev/null 2>&1; then
     echo "unexpected positive pre-checkout for $bad" >&2
     exit 3
@@ -148,16 +149,16 @@ done
 # Fail closed for malformed URL shapes even when Preview is enabled. The
 # existing exact HTTPS, DNS-label and /v1/git/... route checks stay in force.
 for malformed in \
-  'https://operator@app.trunk.dev/v1/git/acme/fixture.git' \
-  'https://app.trunk.dev:443/v1/git/acme/fixture.git' \
-  'https://app..trunk.dev/v1/git/acme/fixture.git' \
-  'https://app.trunk.dev/v1/git/acme/fixture.git?query=1' \
-  'https://app.trunk.dev/v1/git/acme/fixture.git#fragment' \
-  'http://app.trunk.dev/v1/git/acme/fixture.git' \
+  'https://operator@api.trunk.dev/v1/git/acme/fixture.git' \
+  'https://api.trunk.dev:443/v1/git/acme/fixture.git' \
+  'https://api..trunk.dev/v1/git/acme/fixture.git' \
+  'https://api.trunk.dev/v1/git/acme/fixture.git?query=1' \
+  'https://api.trunk.dev/v1/git/acme/fixture.git#fragment' \
+  'http://api.trunk.dev/v1/git/acme/fixture.git' \
   'https://127.0.0.1/v1/git/acme/fixture.git' \
-  'https://app.trunk.dev/v1/git/acme/../fixture.git' \
-  'https://app.trunk.dev/v1/git/acme/fixture.git/' \
-  'https://app.trunk.dev.evil.example/v1/git/acme/fixture.git'; do
+  'https://api.trunk.dev/v1/git/acme/../fixture.git' \
+  'https://api.trunk.dev/v1/git/acme/fixture.git/' \
+  'https://api.trunk.dev.evil.example/v1/git/acme/fixture.git'; do
   if (
     export BUILDKITE_REPO="$malformed" ALLOW_TRUNK_PREVIEW=true ALLOW_HOST_REGEX='.+'
     source "$root/hooks/pre-checkout"
@@ -180,10 +181,25 @@ for mode in 'unset' false; do
     exit 20
   fi
 done
+# The old canonical app host is rejected even with explicit Preview opt-in
+# or legacy remote/audience inputs. It must never receive job OIDC.
+for mode in 'unset' false true; do
+  if (
+    export BUILDKITE_REPO='https://app.trunk.dev/v1/git/acme/fixture.git'
+    export ALLOW_HOST_REGEX='[a-z0-9.-]+'
+    export TRUNK_BUILDKITE_GIT_REMOTE="$BUILDKITE_REPO"
+    export TRUNK_BUILDKITE_OIDC_AUDIENCE='https://app.trunk.dev/v1/git/buildkite'
+    if [[ "$mode" == unset ]]; then unset ALLOW_TRUNK_PREVIEW; else export ALLOW_TRUNK_PREVIEW="$mode"; fi
+    source "$root/hooks/pre-checkout"
+  ) >/dev/null 2>&1; then
+    echo "Accepted old app.trunk.dev Git host: $mode" >&2
+    exit 25
+  fi
+done
 # Reject ambiguous toggle values, including on Production URLs.
 for invalidFlag in yes TRUE 1 on '.+'; do
   if (
-    export BUILDKITE_REPO='https://app.trunk.dev/v1/git/acme/fixture.git'
+    export BUILDKITE_REPO='https://api.trunk.dev/v1/git/acme/fixture.git'
     export ALLOW_TRUNK_PREVIEW="$invalidFlag"
     source "$root/hooks/pre-checkout"
   ) >/dev/null 2>&1; then
@@ -215,4 +231,4 @@ done
 [[ ! -s "$AMBIENT_CALLS" ]] ||
   { echo 'ambient Git helper must not be used for an allowed Trunk remote' >&2; exit 24; }
 
-echo 'PASS: native/no-source modes, multiple Trunk repos, hardcoded Trunk Preview host family, default deny and strict boolean, derived audience, URL-scoped helpers, malformed hosts, credential isolation and cleanup'
+echo 'PASS: api.trunk.dev acceptance, app.trunk.dev rejection, native/no-source modes, multiple Trunk repos, hardcoded Trunk Preview host family, default deny and strict boolean, derived audience, URL-scoped helpers, malformed hosts, credential isolation and cleanup'
