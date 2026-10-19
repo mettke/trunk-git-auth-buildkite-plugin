@@ -31,14 +31,9 @@ if [[ "$gitHost" != 'api.trunk.dev' ]]; then
 fi
 # Never use a caller-supplied audience, even if the legacy env name is set.
 audience="https://${gitHost}/v1/git/buildkite"
-# New refs use the collision-free _trunk namespace. Accept the historical
-# trunk/candidates branch only when its own server-side durable grant exists.
-[[ "${BUILDKITE_BRANCH:-}" =~ ^(_trunk|trunk)/candidates/chg_[a-z0-9]+/r[1-9][0-9]*$ ]] || {
-  fail 'Buildkite must request one immutable public candidate branch'; return 1 2>/dev/null || exit 1;
-}
-[[ "${BUILDKITE_COMMIT:-}" =~ ^[0-9a-fA-F]{40}$ ]] || {
-  fail 'Buildkite build commit must be one full 40-char Git SHA'; return 1 2>/dev/null || exit 1;
-}
+# Branch/ref, lifecycle and commit selection are not plugin authorization gates.
+# Preserve Buildkite's checkout inputs unchanged; Trunk authorizes Git reads
+# using the token and durable server-side authority.
 # A plugin option does not substitute for Buildkite's native checkout control.
 # checkout=false requests no automatic source materialization, but still sets
 # the job-local credential helper for possible command-phase Git reads.

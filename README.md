@@ -1,6 +1,6 @@
 # Trunk Git Auth Buildkite Plugin
 
-Buildkite job-scoped Git authentication for an **exact Trunk candidate**. The plugin configures a narrow credential helper before the stock checkout; it never checks out source itself. JWTs are minted on demand from genuine Buildkite job OIDC, and Trunk independently authorizes every Git read against the historical dispatch, binding, repository and immutable candidate. Existing Trunk API, dispatch and revocation controls are not replaced by this plugin.
+Buildkite job-scoped Git authentication for **Trunk-authorized builds**. The plugin configures a narrow credential helper before the stock checkout; it never checks out source itself. JWTs are minted on demand from genuine Buildkite job OIDC, and Trunk independently authorizes every Git read against the historical dispatch, binding, repository and execution provenance. Existing Trunk API, dispatch and revocation controls are not replaced by this plugin.
 
 ## Setup
 
@@ -8,7 +8,7 @@ The public release must be pinned by an **exact reviewed commit SHA**, not a mov
 
 ```yaml
 steps:
-  - label: "Trunk candidate"
+  - label: "Trunk checkout"
     command: "git rev-parse HEAD"
     plugins:
       - balearic-labs/trunk-git-auth#<REVIEWED_40_CHAR_SHA>: {}
@@ -39,8 +39,8 @@ customer's intended repository**. Do not hardcode a second remote in job YAML.
 The plugin also does not configure Trunk's BYO Buildkite dispatch or pipeline
 binding. A wrong but syntactically valid Trunk repository is an operator
 configuration issue; Trunk's signed, historical job/build/pipeline/tenant/repo,
-ref and candidate-SHA authorization independently denies unauthorized Git
-reads.
+execution provenance and token authorization independently denies unauthorized
+Git reads.
 
 Before enabling its job-local helper, `pre-checkout` requires one canonical
 lowercase-DNS HTTPS host, no port/userinfo/escape/query/fragment, and the exact
@@ -73,13 +73,26 @@ This option restricts *where a Buildkite-issued token can be sent*; it
 does not prove which Vercel deployment is authoritative. The operator must
 trust control of the matching Preview hostname, and the deployed Trunk
 server must still independently authorize the exact job-bound OIDC audience,
-historical dispatch, immutable candidate and read-only Git operation.
+historical dispatch, execution provenance and read-only Git operation.
 
-The Buildkite job must have a valid public immutable candidate branch
-`_trunk/candidates/chg_.../rN` (historical `trunk/candidates/...` is checked
-server-side), a full 40-character commit, and a genuine Trunk API-created
-Buildkite dispatch. Production Git OIDC remains off unless enabled under its
-own server policy; the plugin cannot authorize a pipeline.
+The plugin imposes no branch, ref, lifecycle or commit-selector authorization
+restriction and leaves `BUILDKITE_BRANCH` and `BUILDKITE_COMMIT` unchanged.
+Candidate refs (including historical `trunk/candidates/...`), landed target
+branches such as `main` or `release/stable`, and other checkout inputs all use
+the same credential path. Native Buildkite/Git handles checkout selection;
+the server determines whether the token authorizes the read. Successful hook
+setup does not prove authorization or successful checkout.
+
+Trunk must still authenticate the genuine job and authorize its exact build,
+tenant, repository, binding generation and execution provenance. Authentic
+jobs in an authorized build retain read-only access throughout the bound
+repository, including other refs/reachable objects; exact intended checkout
+is execution integrity, not per-ref confidentiality. Landed dispatch must
+retain the actual target branch and frozen intended commit even if the branch
+later advances. The plugin neither substitutes a branch head nor disguises
+landed execution as candidate context. Server-denied reads remain denied;
+the plugin grants no cross-repository, cross-tenant, write or general API
+permission. Production Git OIDC remains subject to its own server policy.
 
 On each matching HTTPS credential challenge the helper requests `buildkite-agent oidc request-token --audience ... --claim build_id,pipeline_id`. Tokens are not persisted to Git config, URLs, command arguments or disk. The helper is created with a job-local restrictive permission and pre-exit removes only the matching owned file. Do not install global hooks on a shared queue. Avoid `set -x` around any authentication path.
 
@@ -91,6 +104,6 @@ to `https://api.trunk.dev/v1/git/<org>/<repo>.git` when adopting this plugin
 commit. Its OIDC audience is exactly `https://api.trunk.dev/v1/git/buildkite`.
 Explicitly opted-in Preview hosts retain their own host-derived audience.
 
-Run `./scripts/validate.sh --expected-commit <FULL_40_CHARACTER_COMMIT_SHA>` from a clean Git checkout of the exact reviewed feature commit. The validator verifies the full HEAD and a clean tracked/staged/untracked working tree **before and after** syntax/security checks, mock OIDC multiple-request checks, ambient Git-helper suppression without global-config mutation, default Production-only host and explicit boolean opt-in for the fixed Trunk Vercel Preview host family, malformed HTTPS-origin rejection, isolation and no-checkout behavior. Missing or incorrect SHA, an unexpected repository root, Git read failure, or a dirty checkout fails before tests. It does not substitute for a real API-created Buildkite Hosted job with normal native Git checkout at exact HEAD, a separate source-free no-checkout job, fail-closed authorization negatives, real job lifecycle cleanup and Codex/exact-head validation. Those gates must pass before publication/Trunk script retirement.
+Run `./scripts/validate.sh --expected-commit <FULL_40_CHARACTER_COMMIT_SHA>` from a clean Git checkout of the exact reviewed feature commit. The validator verifies the full HEAD and a clean tracked/staged/untracked working tree **before and after** syntax/security checks, mock OIDC multiple-request checks, ambient Git-helper suppression without global-config mutation, default Production-only host and explicit boolean opt-in for the fixed Trunk Vercel Preview host family, malformed HTTPS-origin rejection, isolation, unchanged branch/commit inputs across candidate and landed contexts, and no-checkout behavior. Missing or incorrect SHA, an unexpected repository root, Git read failure, or a dirty checkout fails before tests. It does not substitute for a real API-created Buildkite Hosted job with normal native Git checkout at exact HEAD, a separate source-free no-checkout job, fail-closed authorization negatives, real job lifecycle cleanup and Codex/exact-head validation. Those gates must pass before publication/Trunk script retirement.
 
 The temporary v1 URLs in Trunk remain independently managed until consumers—including the active ENG-78 fixture—have migrated. Do not rely on these URLs from this plugin, and do not remove them before the approved retirement stage.

@@ -117,8 +117,8 @@ done
 [[ "$(wc -l < "$CALLS")" == 7 ]] || { echo 'second Preview OIDC request missing' >&2; exit 17; }
 [[ ! -s "$AMBIENT_CALLS" ]] || { echo 'ambient Git helper used for allowed hosts' >&2; exit 18; }
 
-# Legacy immutable ref shape remains a syntax-only acceptance; actual Git
-# authority for the historical ref is independently checked by Trunk Core.
+# Historical refs retain the same credential setup; actual Git authority
+# is independently checked by Trunk Core.
 (
   export BUILDKITE_BRANCH='trunk/candidates/chg_abc123/r1'
   export BUILDKITE_PLUGIN_TRUNK_GIT_AUTH_CHECKOUT=true
@@ -138,8 +138,6 @@ done
 for bad in \
   'BUILDKITE_PLUGIN_TRUNK_GIT_AUTH_CHECKOUT=invalid' \
   'BUILDKITE_REPO=https://wrong.example/v1/git/acme/fixture.git' \
-  'BUILDKITE_BRANCH=main' \
-  'BUILDKITE_COMMIT=HEAD' \
   'BUILDKITE_REPO=ssh://api.trunk.dev/v1/git/acme/fixture.git'; do
   if (export BUILDKITE_PLUGIN_TRUNK_GIT_AUTH_CHECKOUT=true; eval "export $bad"; source "$root/hooks/pre-checkout") >/dev/null 2>&1; then
     echo "unexpected positive pre-checkout for $bad" >&2
@@ -231,4 +229,36 @@ done
 [[ ! -s "$AMBIENT_CALLS" ]] ||
   { echo 'ambient Git helper must not be used for an allowed Trunk remote' >&2; exit 24; }
 
-echo 'PASS: api.trunk.dev acceptance, app.trunk.dev rejection, native/no-source modes, multiple Trunk repos, hardcoded Trunk Preview host family, default deny and strict boolean, derived audience, URL-scoped helpers, malformed hosts, credential isolation and cleanup'
+# Checkout identity is server-owned. Exercise real credential-helper requests
+# for candidate, historical, landed and unrelated ref shapes, with exact SHA,
+# symbolic, abbreviated and absent selectors. No plugin allowlist or input
+# rewriting may turn these into candidate context. These are offline setup
+# checks, not claims that the server authorizes each fixture.
+identityRequests=0
+for branch in '_trunk/candidates/chg_abc123/r1' 'trunk/candidates/chg_abc123/r1' 'main' 'release/stable' 'refs/tags/v1.0' 'feature/customer-work' ''; do
+  for commit in aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa HEAD abc1234 ''; do
+    for mode in true false; do
+      (
+        if [[ -n "$branch" ]]; then export BUILDKITE_BRANCH="$branch"; else unset BUILDKITE_BRANCH; fi
+        if [[ -n "$commit" ]]; then export BUILDKITE_COMMIT="$commit"; else unset BUILDKITE_COMMIT; fi
+        export BUILDKITE_PLUGIN_TRUNK_GIT_AUTH_CHECKOUT="$mode" BUILDKITE_SKIP_CHECKOUT=false
+        source "$root/hooks/pre-checkout"
+        [[ "${BUILDKITE_BRANCH-}" == "$branch" && "${BUILDKITE_COMMIT-}" == "$commit" ]]
+        if [[ -z "$branch" ]]; then [[ -z "${BUILDKITE_BRANCH+x}" ]]; fi
+        if [[ -z "$commit" ]]; then [[ -z "${BUILDKITE_COMMIT+x}" ]]; fi
+        if [[ "$mode" == false ]]; then [[ "$BUILDKITE_SKIP_CHECKOUT" == true ]]; else [[ "$BUILDKITE_SKIP_CHECKOUT" == false ]]; fi
+        [[ "$TRUNK_BUILDKITE_OIDC_AUDIENCE" == "$MOCK_EXPECTED_AUDIENCE" && ! -e .git ]]
+        credential="$(printf 'protocol=https\nhost=api.trunk.dev\npath=v1/git/acme/fixture.git\n\n' | git credential fill)"
+        [[ "$credential" == *'username=trunk-byo'* && "$credential" == *'password=eyJhbGciOiJSUzI1NiJ9.eyJqb2IiOiJtb2NrIn0.sigmock'* ]]
+        helper="$TRUNK_BUILDKITE_JOB_HELPER_DIR/credential-helper"
+        source "$root/hooks/pre-exit"
+        [[ ! -e "$helper" ]]
+      )
+      identityRequests=$((identityRequests + 1))
+    done
+  done
+done
+[[ "$(wc -l < "$CALLS")" == "$((7 + identityRequests))" ]]
+[[ ! -s "$AMBIENT_CALLS" ]]
+
+echo 'PASS: unchanged checkout identity without branch/ref/commit gates, api.trunk.dev acceptance, app.trunk.dev rejection, native/no-source modes, multiple Trunk repos, hardcoded Trunk Preview host family, default deny and strict boolean, derived audience, URL-scoped helpers, malformed hosts, credential isolation and cleanup'
