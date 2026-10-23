@@ -55,14 +55,17 @@ For an explicitly authorized *internal Preview* job, the trusted Buildkite
 operator may set a single boolean environment variable:
 
 ```sh
-# Explicit opt-in for the Balearic-owned Trunk Vercel Preview host family.
+# Explicit opt-in for the Balearic or trunk-dev team-scoped Trunk Preview host.
 export ALLOW_TRUNK_PREVIEW=true
 ```
 
-With this opt-in, the only additional allowed hostname shape is
-`trunk-[a-z0-9-]+-balearic-labs.vercel.app` (full hostname match). The
-variable segment permits lowercase letters, numbers and hyphens **but not
-dots**, so a second subdomain or a different Vercel team is never accepted.
+With this opt-in, the only additional allowed hostname shapes are
+`trunk-[a-z0-9-]+-balearic-labs.vercel.app` and
+`trunk-[a-z0-9-]+-trunk-dev.vercel.app` (full hostname matches). The variable
+segment permits lowercase letters, numbers and hyphens **but not dots**;
+other Vercel teams and unscoped deployment URLs are rejected. For the ENG-428
+fixture, use the team-scoped deployment URL as the pipeline Repository host,
+including `-trunk-dev`, and pin the reviewed plugin commit for that job.
 This is a hardcoded host convention, not a user-supplied regular expression:
 the old `ALLOW_HOST_REGEX` setting is ignored and must be removed. By
 default (unset or `false`), only `api.trunk.dev` is allowed; other boolean

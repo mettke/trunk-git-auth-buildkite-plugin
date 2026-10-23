@@ -16,16 +16,16 @@ remote="${BUILDKITE_REPO:-}"
 }
 gitHost="${remote#https://}"
 gitHost="${gitHost%%/*}"
-# Production works without any opt-in. The sole additional trusted host family
-# is the Trunk Vercel Preview naming convention for balearic-labs. Its dynamic
-# part accepts lowercase letters, digits and hyphens, never a dot/subdomain.
-# No operator-supplied regex can widen this host boundary.
+# Production works without any opt-in. Preview is limited to the existing
+# balearic-labs team or the trunk-dev team. The dynamic part accepts lowercase
+# letters, digits and hyphens, never a dot/subdomain. No operator-supplied
+# regex can widen this host boundary.
 case "${ALLOW_TRUNK_PREVIEW:-false}" in
   true|false) ;;
   *) fail 'ALLOW_TRUNK_PREVIEW must be true or false'; return 1 2>/dev/null || exit 1 ;;
 esac
 if [[ "$gitHost" != 'api.trunk.dev' ]]; then
-  [[ "${ALLOW_TRUNK_PREVIEW:-false}" == true && "$gitHost" =~ ^trunk-[a-z0-9-]+-balearic-labs\.vercel\.app$ ]] || {
+  [[ "${ALLOW_TRUNK_PREVIEW:-false}" == true && ( "$gitHost" =~ ^trunk-[a-z0-9-]+-balearic-labs\.vercel\.app$ || "$gitHost" =~ ^trunk-[a-z0-9-]+-trunk-dev\.vercel\.app$ ) ]] || {
     fail 'Git remote host is not an allowed Trunk Production/Preview hostname'; return 1 2>/dev/null || exit 1;
   }
 fi
