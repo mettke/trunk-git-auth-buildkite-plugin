@@ -117,6 +117,27 @@ done
 [[ "$(wc -l < "$CALLS")" == 7 ]] || { echo 'second Preview OIDC request missing' >&2; exit 17; }
 [[ ! -s "$AMBIENT_CALLS" ]] || { echo 'ambient Git helper used for allowed hosts' >&2; exit 18; }
 
+# The trunk-dev team-scoped Preview derives its own OIDC audience. The helper
+# remains limited to the exact configured repository URL.
+trunkDevHost='trunk-f1iis14pv-trunk-dev.vercel.app'
+(
+  export ALLOW_TRUNK_PREVIEW=true ALLOW_HOST_REGEX='.+'
+  export BUILDKITE_REPO="https://$trunkDevHost/v1/git/trunk-dev/eng428-same-build-retry-20261023.git"
+  export MOCK_EXPECTED_AUDIENCE="https://$trunkDevHost/v1/git/buildkite"
+  export BUILDKITE_PLUGIN_TRUNK_GIT_AUTH_CHECKOUT=true
+  source "$root/hooks/pre-checkout"
+  [[ "$TRUNK_BUILDKITE_OIDC_AUDIENCE" == "$MOCK_EXPECTED_AUDIENCE" ]]
+  credential="$(printf 'protocol=https\nhost=%s\npath=v1/git/trunk-dev/eng428-same-build-retry-20261023.git\n\n' "$trunkDevHost" | git credential fill)"
+  [[ "$credential" == *'username=trunk-byo'* && "$credential" == *'password=eyJhbGciOiJSUzI1NiJ9.eyJqb2IiOiJtb2NrIn0.sigmock'* ]] || exit 26
+  helper="$TRUNK_BUILDKITE_JOB_HELPER_DIR/credential-helper"
+  [[ -z "$(printf 'protocol=https\nhost=api.trunk.dev\npath=v1/git/trunk-dev/eng428-same-build-retry-20261023.git\n\n' | "$helper" get)" ]] || exit 27
+  [[ -z "$(printf 'protocol=https\nhost=%s\npath=v1/git/trunk-dev/other.git\n\n' "$trunkDevHost" | "$helper" get)" ]] || exit 28
+  source "$root/hooks/pre-exit"
+  [[ ! -e "$helper" ]] || exit 29
+)
+[[ "$(wc -l < "$CALLS")" == 8 ]] || { echo 'trunk-dev Preview OIDC request missing' >&2; exit 30; }
+[[ ! -s "$AMBIENT_CALLS" ]] || { echo 'ambient Git helper used for allowed hosts' >&2; exit 31; }
+
 # Historical refs retain the same credential setup; actual Git authority
 # is independently checked by Trunk Core.
 (
@@ -167,7 +188,8 @@ for malformed in \
 done
 
 preview='https://trunk-dashboard-qyni6rzes-balearic-labs.vercel.app/v1/git/acme/fixture.git'
-# A missing/false Preview opt-in must deny even if the old regex is wide open.
+# A missing/false Preview opt-in must deny both teams even if the old regex is wide open.
+for preview in "$preview" "https://$trunkDevHost/v1/git/acme/fixture.git"; do
 for mode in 'unset' false; do
   if (
     export BUILDKITE_REPO="$preview" ALLOW_HOST_REGEX='[a-z0-9.-]+'
@@ -175,9 +197,10 @@ for mode in 'unset' false; do
     if [[ "$mode" == unset ]]; then unset ALLOW_TRUNK_PREVIEW; else export ALLOW_TRUNK_PREVIEW=false; fi
     source "$root/hooks/pre-checkout"
   ) >/dev/null 2>&1; then
-    echo "Accepted Preview without true ALLOW_TRUNK_PREVIEW: $mode" >&2
+    echo "Accepted Preview without true ALLOW_TRUNK_PREVIEW: $preview ($mode)" >&2
     exit 20
   fi
+done
 done
 # The old canonical app host is rejected even with explicit Preview opt-in
 # or legacy remote/audience inputs. It must never receive job OIDC.
@@ -213,6 +236,10 @@ for rejected in \
   'https://trunk-dashboard-qyni6rzes-balearic-labs.vercel.app.evil.example/v1/git/acme/fixture.git' \
   'https://evil-trunk-dashboard-qyni6rzes-balearic-labs.vercel.app/v1/git/acme/fixture.git' \
   'https://trunk-dashboard-qyni6rzes-other-team.vercel.app/v1/git/acme/fixture.git' \
+  'https://trunk-03bafe397b3b07e470a165cb475bb30dda978615d702fac7.vercel.app/v1/git/acme/fixture.git' \
+  'https://trunk-f1iis14pv-trunk-dev.vercel.app.evil.example/v1/git/acme/fixture.git' \
+  'https://evil-trunk-f1iis14pv-trunk-dev.vercel.app/v1/git/acme/fixture.git' \
+  'https://trunk-f1iis14pv-trunk-dev.vercel.com/v1/git/acme/fixture.git' \
   'https://trunk-dashboard-qyni6rzes-balearic-labs.evil.example/v1/git/acme/fixture.git' \
   'https://trunk-dashboard-qyni6rzes-balearic-labs.vercel.com/v1/git/acme/fixture.git' \
   'https://other.vercel.app/v1/git/acme/fixture.git'; do
@@ -224,7 +251,7 @@ for rejected in \
     exit 22
   fi
 done
-[[ "$(wc -l < "$CALLS")" == 7 ]] ||
+[[ "$(wc -l < "$CALLS")" == 8 ]] ||
   { echo 'rejected Git destinations must not request OIDC' >&2; exit 23; }
 [[ ! -s "$AMBIENT_CALLS" ]] ||
   { echo 'ambient Git helper must not be used for an allowed Trunk remote' >&2; exit 24; }
@@ -258,7 +285,7 @@ for branch in '_trunk/candidates/chg_abc123/r1' 'trunk/candidates/chg_abc123/r1'
     done
   done
 done
-[[ "$(wc -l < "$CALLS")" == "$((7 + identityRequests))" ]]
+[[ "$(wc -l < "$CALLS")" == "$((8 + identityRequests))" ]]
 [[ ! -s "$AMBIENT_CALLS" ]]
 
 echo 'PASS: unchanged checkout identity without branch/ref/commit gates, api.trunk.dev acceptance, app.trunk.dev rejection, native/no-source modes, multiple Trunk repos, hardcoded Trunk Preview host family, default deny and strict boolean, derived audience, URL-scoped helpers, malformed hosts, credential isolation and cleanup'
