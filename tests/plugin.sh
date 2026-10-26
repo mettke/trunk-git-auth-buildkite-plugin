@@ -138,9 +138,9 @@ trunkDevHost='trunk-f1iis14pv-trunk-dev.vercel.app'
 [[ "$(wc -l < "$CALLS")" == 8 ]] || { echo 'trunk-dev Preview OIDC request missing' >&2; exit 30; }
 [[ ! -s "$AMBIENT_CALLS" ]] || { echo 'ambient Git helper used for allowed hosts' >&2; exit 31; }
 
-# The stable 40-hex API Change host follows revisions without another
+# The stable 48-hex API Change host follows revisions without another
 # pipeline setting. Its OIDC audience and helper remain exact to this URL.
-stablePreviewHost='trunk-03bafe397b3b07e470a165cb475bb30dda978615.vercel.app'
+stablePreviewHost='trunk-03bafe397b3b07e470a165cb475bb30dda978615d702fac7.vercel.app'
 (
   export ALLOW_TRUNK_PREVIEW=true ALLOW_HOST_REGEX='.+'
   export BUILDKITE_REPO="https://$stablePreviewHost/v1/git/trunk-dev/eng428-same-build-retry-20261023.git"
@@ -161,7 +161,7 @@ stablePreviewHost='trunk-03bafe397b3b07e470a165cb475bb30dda978615.vercel.app'
 
 # The syntax supports a different Change alias without hardcoding this
 # fixture's hash or requiring an additional pipeline variable.
-anotherStableHost='trunk-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.vercel.app'
+anotherStableHost='trunk-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.vercel.app'
 (
   export ALLOW_TRUNK_PREVIEW=true
   export BUILDKITE_REPO="https://$anotherStableHost/v1/git/acme/fixture.git"
@@ -274,10 +274,10 @@ for rejected in \
   'https://trunk-dashboard-qyni6rzes-balearic-labs.vercel.app.evil.example/v1/git/acme/fixture.git' \
   'https://evil-trunk-dashboard-qyni6rzes-balearic-labs.vercel.app/v1/git/acme/fixture.git' \
   'https://trunk-dashboard-qyni6rzes-other-team.vercel.app/v1/git/acme/fixture.git' \
-  'https://trunk-03bafe397b3b07e470a165cb475bb30dda978615d702fac7.vercel.app/v1/git/acme/fixture.git' \
-  'https://trunk-03bafe397b3b07e470a165cb475bb30dda978615a.vercel.app/v1/git/acme/fixture.git' \
-  'https://trunk-03bafe397b3b07e470a165cb475bb30dda97861.vercel.app/v1/git/acme/fixture.git' \
-  'https://trunk-03bafe397b3b07e470a165cb475bb30dda978615g.vercel.app/v1/git/acme/fixture.git' \
+  'https://trunk-03bafe397b3b07e470a165cb475bb30dda978615.vercel.app/v1/git/acme/fixture.git' \
+  'https://trunk-03bafe397b3b07e470a165cb475bb30dda978615d702fac.vercel.app/v1/git/acme/fixture.git' \
+  'https://trunk-03bafe397b3b07e470a165cb475bb30dda978615d702fac7a.vercel.app/v1/git/acme/fixture.git' \
+  'https://trunk-03bafe397b3b07e470a165cb475bb30dda978615d702facg.vercel.app/v1/git/acme/fixture.git' \
   'https://trunk-03bafe397b3b07e470a165cb475bb30dda978615.vercel.app.evil.example/v1/git/acme/fixture.git' \
   'https://trunk-03bafe397b3b07e470a165cb475bb30dda978615.vercel.com/v1/git/acme/fixture.git' \
   'https://trunk-f1iis14pv-trunk-dev.vercel.app.evil.example/v1/git/acme/fixture.git' \
@@ -331,4 +331,4 @@ done
 [[ "$(wc -l < "$CALLS")" == "$((10 + identityRequests))" ]]
 [[ ! -s "$AMBIENT_CALLS" ]]
 
-echo 'PASS: unchanged checkout identity without branch/ref/commit gates, api.trunk.dev acceptance, app.trunk.dev rejection, native/no-source modes, multiple Trunk repos, hardcoded Trunk Preview host families and stable 40-hex alias, default deny and strict boolean, derived audience, URL-scoped helpers, malformed hosts, credential isolation and cleanup'
+echo 'PASS: unchanged checkout identity without branch/ref/commit gates, api.trunk.dev acceptance, app.trunk.dev rejection, native/no-source modes, multiple Trunk repos, hardcoded Trunk Preview host families and stable 48-hex alias, default deny and strict boolean, derived audience, URL-scoped helpers, malformed hosts, credential isolation and cleanup'

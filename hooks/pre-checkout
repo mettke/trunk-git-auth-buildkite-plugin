@@ -17,7 +17,7 @@ remote="${BUILDKITE_REPO:-}"
 gitHost="${remote#https://}"
 gitHost="${gitHost%%/*}"
 # Production works without any opt-in. Preview permits the two
-# team-scoped deployment families and unscoped 40-hex Change aliases.
+# team-scoped deployment families and unscoped 48-hex Change aliases.
 # This syntax check does not prove Vercel ownership. With Preview opted in,
 # the operator trusts the configured Repository URL as a credential destination.
 # No operator-supplied regex can widen this host boundary.
@@ -26,7 +26,7 @@ case "${ALLOW_TRUNK_PREVIEW:-false}" in
   *) fail 'ALLOW_TRUNK_PREVIEW must be true or false'; return 1 2>/dev/null || exit 1 ;;
 esac
 if [[ "$gitHost" != 'api.trunk.dev' ]]; then
-  [[ "${ALLOW_TRUNK_PREVIEW:-false}" == true && ( "$gitHost" =~ ^trunk-[a-z0-9-]+-balearic-labs\.vercel\.app$ || "$gitHost" =~ ^trunk-[a-z0-9-]+-trunk-dev\.vercel\.app$ || "$gitHost" =~ ^trunk-[0-9a-f]{40}\.vercel\.app$ ) ]] || {
+  [[ "${ALLOW_TRUNK_PREVIEW:-false}" == true && ( "$gitHost" =~ ^trunk-[a-z0-9-]+-balearic-labs\.vercel\.app$ || "$gitHost" =~ ^trunk-[a-z0-9-]+-trunk-dev\.vercel\.app$ || "$gitHost" =~ ^trunk-[0-9a-f]{48}\.vercel\.app$ ) ]] || {
     fail 'Git remote host is not an allowed Trunk Production/Preview hostname'; return 1 2>/dev/null || exit 1;
   }
 fi

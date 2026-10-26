@@ -62,9 +62,9 @@ export ALLOW_TRUNK_PREVIEW=true
 With this opt-in, the only additional allowed hostname shapes are
 `trunk-[a-z0-9-]+-balearic-labs.vercel.app`,
 `trunk-[a-z0-9-]+-trunk-dev.vercel.app`, and the stable Change alias
-`trunk-[0-9a-f]{40}.vercel.app` (full hostname matches). The first two
+`trunk-[0-9a-f]{48}.vercel.app` (full hostname matches). The first two
 permit lowercase letters, numbers and hyphens but no dot in their variable
-part; the unscoped alias requires **exactly 40 lowercase hex characters**.
+part; the unscoped alias requires **exactly 48 lowercase hex characters**.
 For the ENG-428 fixture, the pipeline Repository can use its stable API
 Change alias across revisions with only `ALLOW_TRUNK_PREVIEW=true`.
 Pin the reviewed plugin commit for the job. This is a hardcoded hostname
@@ -75,7 +75,7 @@ values are rejected. The Preview opt-in never loosens HTTPS, URL path,
 port, userinfo, query or fragment validation.
 
 This option restricts *where a Buildkite-issued token can be sent*; it
-does not prove which Vercel deployment is authoritative. Unscoped 40-hex
+does not prove which Vercel deployment is authoritative. Unscoped 48-hex
 aliases are globally claimable: a mistyped or reclaimed configured alias can
 receive a genuine job OIDC token. Preview jobs therefore require the operator
 to verify control of the Repository hostname before running them. The deployed
