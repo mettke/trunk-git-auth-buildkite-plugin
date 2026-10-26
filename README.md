@@ -75,10 +75,13 @@ values are rejected. The Preview opt-in never loosens HTTPS, URL path,
 port, userinfo, query or fragment validation.
 
 This option restricts *where a Buildkite-issued token can be sent*; it
-does not prove which Vercel deployment is authoritative. The operator must
-trust control of the matching Preview hostname, and the deployed Trunk
-server must still independently authorize the exact job-bound OIDC audience,
-historical dispatch, execution provenance and read-only Git operation.
+does not prove which Vercel deployment is authoritative. Unscoped 40-hex
+aliases are globally claimable: a mistyped or reclaimed configured alias can
+receive a genuine job OIDC token. Preview jobs therefore require the operator
+to verify control of the Repository hostname before running them. The deployed
+Trunk server must still independently authorize the exact job-bound OIDC
+audience, historical dispatch, execution provenance and read-only Git
+operation; that server check cannot prevent token disclosure to a wrong host.
 
 The plugin imposes no branch, ref, lifecycle or commit-selector authorization
 restriction and leaves `BUILDKITE_BRANCH` and `BUILDKITE_COMMIT` unchanged.

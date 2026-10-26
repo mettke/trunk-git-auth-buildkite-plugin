@@ -156,7 +156,7 @@ stablePreviewHost='trunk-03bafe397b3b07e470a165cb475bb30dda978615.vercel.app'
   source "$root/hooks/pre-exit"
   [[ ! -e "$helper" ]] || exit 35
 )
-[[ "$(wc -l < "$CALLS")" == 9 ]] || { echo 'stable Preview OIDC request missing' >&2; exit 36 }
+[[ "$(wc -l < "$CALLS")" == 9 ]] || { echo 'stable Preview OIDC request missing' >&2; exit 36; }
 [[ ! -s "$AMBIENT_CALLS" ]] || { echo 'ambient Git helper used for allowed hosts' >&2; exit 37; }
 
 # The syntax supports a different Change alias without hardcoding this
@@ -174,7 +174,7 @@ anotherStableHost='trunk-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.vercel.app'
   source "$root/hooks/pre-exit"
   [[ ! -e "$helper" ]] || exit 40
 )
-[[ "$(wc -l < "$CALLS")" == 10 ]] || { echo 'second stable Preview OIDC request missing' >&2; exit 41 }
+[[ "$(wc -l < "$CALLS")" == 10 ]] || { echo 'second stable Preview OIDC request missing' >&2; exit 41; }
 
 # Historical refs retain the same credential setup; actual Git authority
 # is independently checked by Trunk Core.

@@ -16,10 +16,10 @@ remote="${BUILDKITE_REPO:-}"
 }
 gitHost="${remote#https://}"
 gitHost="${gitHost%%/*}"
-# Production works without any opt-in. Preview permits the two trusted
-# team-scoped deployment families and Trunk's stable 40-hex Change alias.
-# This syntax check does not prove Vercel ownership; the operator selects the
-# Repository URL and Trunk independently authenticates the job's Git read.
+# Production works without any opt-in. Preview permits the two
+# team-scoped deployment families and unscoped 40-hex Change aliases.
+# This syntax check does not prove Vercel ownership. With Preview opted in,
+# the operator trusts the configured Repository URL as a credential destination.
 # No operator-supplied regex can widen this host boundary.
 case "${ALLOW_TRUNK_PREVIEW:-false}" in
   true|false) ;;
