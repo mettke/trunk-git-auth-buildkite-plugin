@@ -77,7 +77,7 @@ done
 )
 [[ "$(wc -l < "$CALLS")" == 5 ]] || { echo 'different Trunk repo OIDC request missing' >&2; exit 9; }
 
-# Preview opt-in permits only the hardcoded Trunk Vercel host family.
+# Preview opt-in permits only the fixed Trunk Vercel host shapes.
 # Legacy ALLOW_HOST_REGEX is deliberately set to an unrestricted value:
 # it MUST have no influence on credential destination validation.
 (
