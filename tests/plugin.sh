@@ -278,8 +278,8 @@ for rejected in \
   'https://trunk-03bafe397b3b07e470a165cb475bb30dda978615d702fac.vercel.app/v1/git/acme/fixture.git' \
   'https://trunk-03bafe397b3b07e470a165cb475bb30dda978615d702fac7a.vercel.app/v1/git/acme/fixture.git' \
   'https://trunk-03bafe397b3b07e470a165cb475bb30dda978615d702facg.vercel.app/v1/git/acme/fixture.git' \
-  'https://trunk-03bafe397b3b07e470a165cb475bb30dda978615.vercel.app.evil.example/v1/git/acme/fixture.git' \
-  'https://trunk-03bafe397b3b07e470a165cb475bb30dda978615.vercel.com/v1/git/acme/fixture.git' \
+  'https://trunk-03bafe397b3b07e470a165cb475bb30dda978615d702fac7.vercel.app.evil.example/v1/git/acme/fixture.git' \
+  'https://trunk-03bafe397b3b07e470a165cb475bb30dda978615d702fac7.vercel.com/v1/git/acme/fixture.git' \
   'https://trunk-f1iis14pv-trunk-dev.vercel.app.evil.example/v1/git/acme/fixture.git' \
   'https://evil-trunk-f1iis14pv-trunk-dev.vercel.app/v1/git/acme/fixture.git' \
   'https://trunk-f1iis14pv-trunk-dev.vercel.com/v1/git/acme/fixture.git' \
