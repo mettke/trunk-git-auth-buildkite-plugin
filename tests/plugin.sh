@@ -138,6 +138,44 @@ trunkDevHost='trunk-f1iis14pv-trunk-dev.vercel.app'
 [[ "$(wc -l < "$CALLS")" == 8 ]] || { echo 'trunk-dev Preview OIDC request missing' >&2; exit 30; }
 [[ ! -s "$AMBIENT_CALLS" ]] || { echo 'ambient Git helper used for allowed hosts' >&2; exit 31; }
 
+# The stable 40-hex API Change host follows revisions without another
+# pipeline setting. Its OIDC audience and helper remain exact to this URL.
+stablePreviewHost='trunk-03bafe397b3b07e470a165cb475bb30dda978615.vercel.app'
+(
+  export ALLOW_TRUNK_PREVIEW=true ALLOW_HOST_REGEX='.+'
+  export BUILDKITE_REPO="https://$stablePreviewHost/v1/git/trunk-dev/eng428-same-build-retry-20261023.git"
+  export MOCK_EXPECTED_AUDIENCE="https://$stablePreviewHost/v1/git/buildkite"
+  export TRUNK_BUILDKITE_OIDC_AUDIENCE='https://wrong.example/v1/git/buildkite'
+  source "$root/hooks/pre-checkout"
+  [[ "$TRUNK_BUILDKITE_OIDC_AUDIENCE" == "$MOCK_EXPECTED_AUDIENCE" ]]
+  credential="$(printf 'protocol=https\nhost=%s\npath=v1/git/trunk-dev/eng428-same-build-retry-20261023.git\n\n' "$stablePreviewHost" | git credential fill)"
+  [[ "$credential" == *'username=trunk-byo'* && "$credential" == *'password=eyJhbGciOiJSUzI1NiJ9.eyJqb2IiOiJtb2NrIn0.sigmock'* ]] || exit 32
+  helper="$TRUNK_BUILDKITE_JOB_HELPER_DIR/credential-helper"
+  [[ -z "$(printf 'protocol=https\nhost=%s\npath=v1/git/trunk-dev/other.git\n\n' "$stablePreviewHost" | "$helper" get)" ]] || exit 33
+  [[ -z "$(printf 'protocol=https\nhost=%s\npath=v1/git/trunk-dev/eng428-same-build-retry-20261023.git\n\n' "$trunkDevHost" | "$helper" get)" ]] || exit 34
+  source "$root/hooks/pre-exit"
+  [[ ! -e "$helper" ]] || exit 35
+)
+[[ "$(wc -l < "$CALLS")" == 9 ]] || { echo 'stable Preview OIDC request missing' >&2; exit 36 }
+[[ ! -s "$AMBIENT_CALLS" ]] || { echo 'ambient Git helper used for allowed hosts' >&2; exit 37; }
+
+# The syntax supports a different Change alias without hardcoding this
+# fixture's hash or requiring an additional pipeline variable.
+anotherStableHost='trunk-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.vercel.app'
+(
+  export ALLOW_TRUNK_PREVIEW=true
+  export BUILDKITE_REPO="https://$anotherStableHost/v1/git/acme/fixture.git"
+  export MOCK_EXPECTED_AUDIENCE="https://$anotherStableHost/v1/git/buildkite"
+  source "$root/hooks/pre-checkout"
+  credential="$(printf 'protocol=https\nhost=%s\npath=v1/git/acme/fixture.git\n\n' "$anotherStableHost" | git credential fill)"
+  [[ "$credential" == *'username=trunk-byo'* ]] || exit 38
+  helper="$TRUNK_BUILDKITE_JOB_HELPER_DIR/credential-helper"
+  [[ -z "$(printf 'protocol=https\nhost=%s\npath=v1/git/acme/fixture.git\n\n' "$stablePreviewHost" | "$helper" get)" ]] || exit 39
+  source "$root/hooks/pre-exit"
+  [[ ! -e "$helper" ]] || exit 40
+)
+[[ "$(wc -l < "$CALLS")" == 10 ]] || { echo 'second stable Preview OIDC request missing' >&2; exit 41 }
+
 # Historical refs retain the same credential setup; actual Git authority
 # is independently checked by Trunk Core.
 (
@@ -188,8 +226,8 @@ for malformed in \
 done
 
 preview='https://trunk-dashboard-qyni6rzes-balearic-labs.vercel.app/v1/git/acme/fixture.git'
-# A missing/false Preview opt-in must deny both teams even if the old regex is wide open.
-for preview in "$preview" "https://$trunkDevHost/v1/git/acme/fixture.git"; do
+# A missing/false Preview opt-in must deny both teams and the stable alias.
+for preview in "$preview" "https://$trunkDevHost/v1/git/acme/fixture.git" "https://$stablePreviewHost/v1/git/acme/fixture.git"; do
 for mode in 'unset' false; do
   if (
     export BUILDKITE_REPO="$preview" ALLOW_HOST_REGEX='[a-z0-9.-]+'
@@ -228,8 +266,8 @@ for invalidFlag in yes TRUE 1 on '.+'; do
     exit 21
   fi
 done
-# The dot is not permitted inside the variable hostname part. Anchors also
-# exclude a different Vercel team, prefix, suffix or extra DNS subdomain.
+# Anchors exclude a different Vercel team, malformed stable hash length or
+# alphabet, prefix, suffix and extra DNS subdomains.
 for rejected in \
   'https://trunk-dashboard.qyni6rzes-balearic-labs.vercel.app/v1/git/acme/fixture.git' \
   'https://trunk-dashboard-qyni6rzes.balearic-labs.vercel.app/v1/git/acme/fixture.git' \
@@ -237,6 +275,11 @@ for rejected in \
   'https://evil-trunk-dashboard-qyni6rzes-balearic-labs.vercel.app/v1/git/acme/fixture.git' \
   'https://trunk-dashboard-qyni6rzes-other-team.vercel.app/v1/git/acme/fixture.git' \
   'https://trunk-03bafe397b3b07e470a165cb475bb30dda978615d702fac7.vercel.app/v1/git/acme/fixture.git' \
+  'https://trunk-03bafe397b3b07e470a165cb475bb30dda978615a.vercel.app/v1/git/acme/fixture.git' \
+  'https://trunk-03bafe397b3b07e470a165cb475bb30dda97861.vercel.app/v1/git/acme/fixture.git' \
+  'https://trunk-03bafe397b3b07e470a165cb475bb30dda978615g.vercel.app/v1/git/acme/fixture.git' \
+  'https://trunk-03bafe397b3b07e470a165cb475bb30dda978615.vercel.app.evil.example/v1/git/acme/fixture.git' \
+  'https://trunk-03bafe397b3b07e470a165cb475bb30dda978615.vercel.com/v1/git/acme/fixture.git' \
   'https://trunk-f1iis14pv-trunk-dev.vercel.app.evil.example/v1/git/acme/fixture.git' \
   'https://evil-trunk-f1iis14pv-trunk-dev.vercel.app/v1/git/acme/fixture.git' \
   'https://trunk-f1iis14pv-trunk-dev.vercel.com/v1/git/acme/fixture.git' \
@@ -247,11 +290,11 @@ for rejected in \
     export BUILDKITE_REPO="$rejected" ALLOW_TRUNK_PREVIEW=true ALLOW_HOST_REGEX='[a-z0-9.-]+'
     source "$root/hooks/pre-checkout"
   ) >/dev/null 2>&1; then
-    echo "Accepted outside fixed Trunk Preview host family: $rejected" >&2
+    echo "Accepted outside fixed Trunk Preview host shapes: $rejected" >&2
     exit 22
   fi
 done
-[[ "$(wc -l < "$CALLS")" == 8 ]] ||
+[[ "$(wc -l < "$CALLS")" == 10 ]] ||
   { echo 'rejected Git destinations must not request OIDC' >&2; exit 23; }
 [[ ! -s "$AMBIENT_CALLS" ]] ||
   { echo 'ambient Git helper must not be used for an allowed Trunk remote' >&2; exit 24; }
@@ -285,7 +328,7 @@ for branch in '_trunk/candidates/chg_abc123/r1' 'trunk/candidates/chg_abc123/r1'
     done
   done
 done
-[[ "$(wc -l < "$CALLS")" == "$((8 + identityRequests))" ]]
+[[ "$(wc -l < "$CALLS")" == "$((10 + identityRequests))" ]]
 [[ ! -s "$AMBIENT_CALLS" ]]
 
-echo 'PASS: unchanged checkout identity without branch/ref/commit gates, api.trunk.dev acceptance, app.trunk.dev rejection, native/no-source modes, multiple Trunk repos, hardcoded Trunk Preview host family, default deny and strict boolean, derived audience, URL-scoped helpers, malformed hosts, credential isolation and cleanup'
+echo 'PASS: unchanged checkout identity without branch/ref/commit gates, api.trunk.dev acceptance, app.trunk.dev rejection, native/no-source modes, multiple Trunk repos, hardcoded Trunk Preview host families and stable 40-hex alias, default deny and strict boolean, derived audience, URL-scoped helpers, malformed hosts, credential isolation and cleanup'

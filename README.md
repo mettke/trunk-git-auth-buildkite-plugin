@@ -55,18 +55,20 @@ For an explicitly authorized *internal Preview* job, the trusted Buildkite
 operator may set a single boolean environment variable:
 
 ```sh
-# Explicit opt-in for the Balearic or trunk-dev team-scoped Trunk Preview host.
+# Explicit opt-in for Trunk Preview deployment hosts and stable Change aliases.
 export ALLOW_TRUNK_PREVIEW=true
 ```
 
 With this opt-in, the only additional allowed hostname shapes are
-`trunk-[a-z0-9-]+-balearic-labs.vercel.app` and
-`trunk-[a-z0-9-]+-trunk-dev.vercel.app` (full hostname matches). The variable
-segment permits lowercase letters, numbers and hyphens **but not dots**;
-other Vercel teams and unscoped deployment URLs are rejected. For the ENG-428
-fixture, use the team-scoped deployment URL as the pipeline Repository host,
-including `-trunk-dev`, and pin the reviewed plugin commit for that job.
-This is a hardcoded host convention, not a user-supplied regular expression:
+`trunk-[a-z0-9-]+-balearic-labs.vercel.app`,
+`trunk-[a-z0-9-]+-trunk-dev.vercel.app`, and the stable Change alias
+`trunk-[0-9a-f]{40}.vercel.app` (full hostname matches). The first two
+permit lowercase letters, numbers and hyphens but no dot in their variable
+part; the unscoped alias requires **exactly 40 lowercase hex characters**.
+For the ENG-428 fixture, the pipeline Repository can use its stable API
+Change alias across revisions with only `ALLOW_TRUNK_PREVIEW=true`.
+Pin the reviewed plugin commit for the job. This is a hardcoded hostname
+syntax convention, not a proof of Vercel ownership or a user-supplied regex:
 the old `ALLOW_HOST_REGEX` setting is ignored and must be removed. By
 default (unset or `false`), only `api.trunk.dev` is allowed; other boolean
 values are rejected. The Preview opt-in never loosens HTTPS, URL path,
@@ -107,6 +109,6 @@ to `https://api.trunk.dev/v1/git/<org>/<repo>.git` when adopting this plugin
 commit. Its OIDC audience is exactly `https://api.trunk.dev/v1/git/buildkite`.
 Explicitly opted-in Preview hosts retain their own host-derived audience.
 
-Run `./scripts/validate.sh --expected-commit <FULL_40_CHARACTER_COMMIT_SHA>` from a clean Git checkout of the exact reviewed feature commit. The validator verifies the full HEAD and a clean tracked/staged/untracked working tree **before and after** syntax/security checks, mock OIDC multiple-request checks, ambient Git-helper suppression without global-config mutation, default Production-only host and explicit boolean opt-in for the fixed Trunk Vercel Preview host family, malformed HTTPS-origin rejection, isolation, unchanged branch/commit inputs across candidate and landed contexts, and no-checkout behavior. Missing or incorrect SHA, an unexpected repository root, Git read failure, or a dirty checkout fails before tests. It does not substitute for a real API-created Buildkite Hosted job with normal native Git checkout at exact HEAD, a separate source-free no-checkout job, fail-closed authorization negatives, real job lifecycle cleanup and Codex/exact-head validation. Those gates must pass before publication/Trunk script retirement.
+Run `./scripts/validate.sh --expected-commit <FULL_40_CHARACTER_COMMIT_SHA>` from a clean Git checkout of the exact reviewed feature commit. The validator verifies the full HEAD and a clean tracked/staged/untracked working tree **before and after** syntax/security checks, mock OIDC multiple-request checks, ambient Git-helper suppression without global-config mutation, default Production-only host and explicit boolean opt-in for the fixed Trunk Vercel Preview deployment and stable-alias shapes, malformed HTTPS-origin rejection, isolation, unchanged branch/commit inputs across candidate and landed contexts, and no-checkout behavior. Missing or incorrect SHA, an unexpected repository root, Git read failure, or a dirty checkout fails before tests. It does not substitute for a real API-created Buildkite Hosted job with normal native Git checkout at exact HEAD, a separate source-free no-checkout job, fail-closed authorization negatives, real job lifecycle cleanup and Codex/exact-head validation. Those gates must pass before publication/Trunk script retirement.
 
 The temporary v1 URLs in Trunk remain independently managed until consumers—including the active ENG-78 fixture—have migrated. Do not rely on these URLs from this plugin, and do not remove them before the approved retirement stage.
